@@ -5,12 +5,7 @@ load(
     "tf_copts",
     "tf_cuda_library",
 )
-
-# buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
-
-# buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "filegroup")
+load("//tensorflow:tensorflow.default.bzl", "filegroup", "tf_cuda_cc_test")
 
 # For platform specific build config
 load(
@@ -28,6 +23,7 @@ load(
 )
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow:internal",
         "//tensorflow_models:__subpackages__",
@@ -64,13 +60,6 @@ cc_library(
     ],
     deps = [
         "//tensorflow/core/common_runtime/device:device_event_mgr_hdrs",
-    ],
-)
-
-cc_library(
-    name = "cuda",
-    deps = [
-        "//tensorflow/tsl/platform/default/build_config:cuda",
     ],
 )
 
@@ -141,13 +130,13 @@ filegroup(
         "gpu_device.h",
         "gpu_id.h",
         "gpu_id_manager.h",
-        "gpu_init.h",
         "gpu_managed_allocator.h",
         "gpu_process_state.h",
         "gpu_util.h",
         "gpu_virtual_mem_allocator.h",
         "//tensorflow/core/common_runtime:gpu_runtime_headers",
         "//tensorflow/core/common_runtime/device:device_runtime_headers",
+        "//tensorflow/tsl/framework:bfc_allocator.h",
     ],
     visibility = ["//visibility:private"],
 )
@@ -172,12 +161,17 @@ tf_cuda_library(
         "//tensorflow/compiler/xla/stream_executor/gpu:gpu_stream",
         ":gpu_virtual_mem_allocator",
     ],
+    visibility = [
+        "//tensorflow:internal",
+        "//tensorflow_models:__subpackages__",
+    ],
     deps = [
         ":gpu_bfc_allocator",
         ":gpu_cudamallocasync_allocator",
         ":gpu_id_impl",
-        ":gpu_init_impl",
         ":gpu_lib",
+        "//tensorflow/compiler/xla/stream_executor:device_id_utils",
+        "//tensorflow/compiler/xla/stream_executor/gpu:gpu_init_impl",
         "//tensorflow/core:core_cpu_lib",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
@@ -192,10 +186,8 @@ tf_cuda_library(
         "//tensorflow/core/profiler/lib:annotated_traceme",
         "//tensorflow/core/profiler/lib:scoped_annotation",
         "//tensorflow/core/profiler/lib:scoped_memory_debug_annotation",
-        "//third_party/eigen3",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:optional",
     ],
     alwayslink = 1,
 )
@@ -212,7 +204,8 @@ tf_cuda_library(
     ],
     deps = [
         ":gpu_id_impl",
-        ":gpu_init_impl",
+        "//tensorflow/compiler/xla/stream_executor:device_id_utils",
+        "//tensorflow/compiler/xla/stream_executor/gpu:gpu_init_impl",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
         "//tensorflow/core/platform:stream_executor",
@@ -227,6 +220,8 @@ tf_cuda_library(
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
+        "//tensorflow/compiler/xla/stream_executor:device_id_utils",
+        "//tensorflow/compiler/xla/stream_executor/gpu:gpu_init",
         "//tensorflow/core:core_cpu_lib",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
@@ -284,44 +279,9 @@ tf_cuda_library(
         "//tensorflow/core:lib_internal",
         "//tensorflow/core/framework:allocator",
         "//tensorflow/core/platform:stream_executor",
+        "//tensorflow/core/profiler/lib:traceme",
         "@com_google_absl//absl/strings:str_format",
     ],
-)
-
-tf_cuda_library(
-    name = "gpu_init",
-    hdrs = [
-        "gpu_init.h",
-    ],
-    deps = [
-        "//tensorflow/core:framework",
-        "//tensorflow/core:framework_internal",
-        "//tensorflow/core:lib",
-        "//tensorflow/core:lib_internal",
-        "//tensorflow/core/platform:stream_executor",
-    ] + if_static(
-        [":gpu_init_impl"],
-    ),
-)
-
-tf_cuda_library(
-    name = "gpu_init_impl",
-    srcs = [
-        "gpu_init.cc",
-    ],
-    hdrs = [
-        "gpu_init.h",
-    ],
-    copts = tf_copts(),
-    linkstatic = 1,
-    deps = [
-        "//tensorflow/core:framework",
-        "//tensorflow/core:framework_internal",
-        "//tensorflow/core:lib",
-        "//tensorflow/core:lib_internal",
-        "//tensorflow/core/platform:stream_executor",
-    ],
-    alwayslink = 1,
 )
 
 # -----------------------------------------------------------------------------
@@ -351,6 +311,7 @@ tf_cuda_cc_test(
     deps = [
         ":gpu_id",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/compiler/xla/stream_executor:device_mem_allocator",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
@@ -390,6 +351,7 @@ tf_cuda_cc_test(
         "//tensorflow/core/common_runtime:core_cpu_internal",
         "//tensorflow/core/common_runtime:direct_session_internal",
         "//tensorflow/core/kernels:ops_util",
+        "//tensorflow/tsl/framework:device_id",
     ],
 )
 
@@ -404,6 +366,7 @@ tf_cuda_cc_test(
     deps = [
         ":gpu_id",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/compiler/xla/stream_executor/gpu:gpu_init",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
@@ -482,6 +445,7 @@ tf_cuda_cc_test(
     deps = [
         ":gpu_id",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/compiler/xla/stream_executor:device_mem_allocator",
         "//tensorflow/compiler/xla/stream_executor:platform",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
@@ -505,8 +469,9 @@ tf_cc_test(
     linkstatic = tf_kernel_tests_linkstatic(),
     tags = tf_cuda_tests_tags(),
     deps = [
-        ":gpu_init",
         ":gpu_virtual_mem_allocator",
+        "//tensorflow/compiler/xla/stream_executor:device_mem_allocator",
+        "//tensorflow/compiler/xla/stream_executor/gpu:gpu_init",
         "//tensorflow/compiler/xla/stream_executor/lib",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",

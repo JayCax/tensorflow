@@ -30,7 +30,7 @@ std::unique_ptr<OpQuantSpec> GetTFOpQuantSpec(Operation* op) {
   auto spec = std::make_unique<OpQuantSpec>();
   if (auto call_op = dyn_cast<TF::PartitionedCallOp>(op)) {
     StringRef function_name =
-        call_op.fAttr().cast<FlatSymbolRefAttr>().getValue();
+        call_op.getFAttr().cast<FlatSymbolRefAttr>().getValue();
     if (!function_name.startswith("composite_")) {
       return spec;
     }
@@ -47,6 +47,18 @@ std::unique_ptr<OpQuantSpec> GetTFOpQuantSpec(Operation* op) {
                                   quant::GetUniformQuantizedTypeForBias};
       }
     } else if (function_name.contains("matmul")) {
+      spec->coeff_op_quant_dim[1] = -1;
+      if (function_name.contains("with_bias")) {
+        spec->biases_params[2] = {{0, 1},
+                                  quant::GetUniformQuantizedTypeForBias};
+      }
+    } else if (function_name.contains("conv3d")) {
+      spec->coeff_op_quant_dim[1] = 4;
+      if (function_name.contains("with_bias")) {
+        spec->biases_params[2] = {{0, 1},
+                                  quant::GetUniformQuantizedTypeForBias};
+      }
+    } else if (function_name.contains("batch_matmul")) {
       spec->coeff_op_quant_dim[1] = -1;
       if (function_name.contains("with_bias")) {
         spec->biases_params[2] = {{0, 1},

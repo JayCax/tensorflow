@@ -13,9 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 
-package(default_visibility = [
-    "//visibility:public",
-])
+package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+    default_visibility = [
+        "//visibility:public",
+    ],
+)
 
 licenses(["notice"])
 
@@ -59,6 +62,7 @@ objc_library(
         "//tensorflow/lite/delegates/coreml/builders:util",
         "//tensorflow/lite/kernels:kernel_util",
     ],
+    alwayslink = 1,
 )
 
 objc_library(

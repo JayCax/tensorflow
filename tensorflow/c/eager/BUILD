@@ -8,15 +8,7 @@ load(
     "tf_cuda_cc_test",
     "tf_cuda_library",
 )
-
-# buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "cc_header_only_library")
-
-# buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "filegroup")
-
-# buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "internal_tfrt_deps")
+load("//tensorflow:tensorflow.default.bzl", "cc_header_only_library", "filegroup", "internal_tfrt_deps")
 load(
     "//tensorflow/core/platform:build_config.bzl",
     "tf_kernel_tests_linkstatic",
@@ -27,6 +19,7 @@ load(
 )
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 
@@ -763,7 +756,10 @@ tf_cuda_cc_test(
     tags = [
         "no_oss",  # TODO(b/200848572)
         "no_windows",
+        # TODO(b/136478427): sanitizers report issues due to unclean exit.
         "noasan",  # leaks gRPC server instances
+        "nomsan",  # b/229991646: use of destructed memory due to unclean exit.
+        "notsan",  # b/259602430: race on destructed mutex due to unclean exit.
     ],
     deps = [
         ":c_api",
@@ -895,7 +891,7 @@ tf_cuda_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/container:flat_hash_map",
         "//tensorflow/c:tf_status_helper",
-        "//tensorflow/core/distributed_runtime/coordination:coordination_service_agent",
+        "//tensorflow/core/distributed_runtime/coordination:coordination_service_error_util",
         "//tensorflow/core/distributed_runtime/eager:eager_client",
         "//tensorflow/core/distributed_runtime/rpc/eager:grpc_eager_client",
         "//tensorflow/core/distributed_runtime/rpc:grpc_channel",
@@ -907,6 +903,7 @@ tf_cuda_library(
         "//tensorflow/core/distributed_runtime:server_lib",
         "//tensorflow/core/distributed_runtime:worker_env",
         "//tensorflow/core:gpu_runtime",
+        "//tensorflow/tsl/distributed_runtime/coordination:coordination_service_agent",
     ],
     alwayslink = 1,
 )
@@ -1022,7 +1019,7 @@ cc_library(
     name = "dlpack",
     srcs = ["dlpack.cc"],
     hdrs = ["dlpack.h"],
-    copts = [
+    copts = tf_copts() + [
         "-fexceptions",
         "-fno-strict-aliasing",
     ],

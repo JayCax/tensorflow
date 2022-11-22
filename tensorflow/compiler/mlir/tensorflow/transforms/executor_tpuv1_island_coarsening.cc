@@ -45,7 +45,6 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_executor.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/transforms/passes.h"
-#include "tensorflow/compiler/mlir/tensorflow/transforms/passes_detail.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/attribute_utils.h"
 #include "tensorflow/core/platform/logging.h"
 
@@ -59,11 +58,14 @@ namespace {
 constexpr llvm::StringRef kTpuStatusAttr = "_tpu_compilation_status";
 constexpr llvm::StringRef kNoReplicationCluster = "__no_replication_cluster";
 
+#define GEN_PASS_DEF_TPUV1BRIDGEEXECUTORISLANDCOARSENINGPASS
+#include "tensorflow/compiler/mlir/tensorflow/transforms/tf_passes.h.inc"
+
 // This pass is a variant of the island coarsening that is limited to
 // TPU-annotated operations and intended to preserve backward compatibility with
 // TFv1.
 struct TpuV1BridgeExecutorIslandCoarsening
-    : public TF::TpuV1BridgeExecutorIslandCoarseningPassBase<
+    : public impl::TpuV1BridgeExecutorIslandCoarseningPassBase<
           TpuV1BridgeExecutorIslandCoarsening> {
   void runOnOperation() override;
 };
@@ -590,8 +592,8 @@ void EraseIdentityWithNoReplicationInfo(Block& graph_body) {
       llvm::Optional<llvm::StringRef> cluster_name = GetTpuClusterName(&op);
       if (cluster_name.hasValue()) continue;
       if (auto identity_op = llvm::dyn_cast_or_null<TF::IdentityOp>(op)) {
-        auto identity_input = identity_op.input();
-        auto output = identity_op.output();
+        auto identity_input = identity_op.getInput();
+        auto output = identity_op.getOutput();
         output.replaceAllUsesWith(identity_input);
         identity_op.erase();
       }

@@ -46,6 +46,10 @@ limitations under the License.
 #include "llvm/IR/IntrinsicsX86.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Value.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_instructions.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_opcode.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/map_util.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
@@ -62,10 +66,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/cpu/shape_partition.h"
 #include "tensorflow/compiler/xla/service/cpu/simple_orc_jit.h"
 #include "tensorflow/compiler/xla/service/elemental_ir_emitter.h"
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/compiler/xla/service/hlo_instructions.h"
-#include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/service/llvm_ir/buffer_assignment_util.h"
 #include "tensorflow/compiler/xla/service/llvm_ir/dynamic_update_slice_util.h"
 #include "tensorflow/compiler/xla/service/llvm_ir/ir_array.h"
@@ -80,8 +80,8 @@ limitations under the License.
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/compiler/xla/window_util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
-#include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/math/math_util.h"
+#include "tensorflow/tsl/lib/math/math_util.h"
+#include "tensorflow/tsl/platform/errors.h"
 #include "tensorflow/tsl/platform/logging.h"
 
 namespace xla {
@@ -1185,6 +1185,8 @@ Status IrEmitter::HandleAllReduceMultipleReplica(HloInstruction* crs) {
       case PRED:
       case S8:
       case U8:
+      case S16:
+      case U16:
       case S32:
       case U32:
       case S64:
@@ -1772,7 +1774,7 @@ StatusOr<bool> IrEmitter::EmitVectorizedReduce(
   bool is_reduction_over_minor_dimension = absl::c_linear_search(
       dimensions, LayoutUtil::Minor(arg->shape().layout(), 0));
 
-  llvm::Align element_alignment(tensorflow::MathUtil::GCD<unsigned>(
+  llvm::Align element_alignment(tsl::MathUtil::GCD<unsigned>(
       ShapeUtil::ByteSizeOfPrimitiveType(reduce->shape().element_type()),
       MinimumAlignmentForPrimitiveType(reduce->shape().element_type())));
 
@@ -2767,7 +2769,7 @@ void IrEmitter::EmitTransferElements(llvm::Value* target, llvm::Value* source,
                                      const llvm_ir::IrArray& source_array) {
   unsigned primitive_type_size =
       ShapeUtil::ByteSizeOfPrimitiveType(primitive_type);
-  llvm::Align element_alignment(tensorflow::MathUtil::GCD<unsigned>(
+  llvm::Align element_alignment(tsl::MathUtil::GCD<unsigned>(
       primitive_type_size, MinimumAlignmentForPrimitiveType(primitive_type)));
   llvm::Type* primitive_llvm_type =
       llvm_ir::PrimitiveTypeToIrType(primitive_type, module_);

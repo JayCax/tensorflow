@@ -18,6 +18,7 @@ limitations under the License.
 #include "pybind11/pybind11.h"
 #include "pybind11/pytypes.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
+#include "tensorflow/compiler/xla/python/numpy.h"
 #include "tensorflow/compiler/xla/python/py_array.h"
 #include "tensorflow/compiler/xla/python/py_buffer.h"
 #include "tensorflow/compiler/xla/python/python_ref_manager.h"
@@ -25,8 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/python/sharding.h"
 #include "tensorflow/compiler/xla/python/types.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
-#include "tensorflow/core/profiler/lib/traceme.h"
-#include "tensorflow/python/lib/core/numpy.h"
+#include "tensorflow/tsl/profiler/lib/traceme.h"
 
 namespace py = pybind11;
 
@@ -275,7 +275,7 @@ StatusOr<DevicePutResult> HandleDeviceArray(py::handle obj,
 
 StatusOr<DevicePutResult> DevicePut(py::handle arg, PjRtDevice* to_device,
                                     const DevicePutOptions& options) {
-  tensorflow::profiler::TraceMe traceme("DevicePut");
+  tsl::profiler::TraceMe traceme("DevicePut");
   static const absl::flat_hash_map<PyObject*, DevicePutFunc>* const handlers =
       [] {
         auto p = new absl::flat_hash_map<PyObject*, DevicePutFunc>();
@@ -347,8 +347,11 @@ StatusOr<DevicePutResult> DevicePut(py::handle arg, PjRtDevice* to_device,
         return p;
       }();
 
-  if (arg.get_type() == xla::PyArray::type()) {
-    return HandlePyArray(arg, to_device, options);
+  if (arg.get_type() == PyArray::type()) {
+    auto array = py::reinterpret_borrow<PyArray>(arg);
+    if (array.fastpath_enabled()) {
+      return HandlePyArray(arg, to_device, options);
+    }
   }
 
   // Fast-path for the most common case of PyBuffer.
@@ -556,8 +559,10 @@ StatusOr<PyArgSignature> PyArgSignatureOfValue(py::handle arg,
 
   if (arg.get_type() == PyArray::type()) {
     auto array = py::reinterpret_borrow<PyArray>(arg);
-    auto dtype = array.GetBuffer(0)->on_device_shape().element_type();
-    return PyArgSignature(dtype, array.shape(), array.weak_type());
+    if (array.fastpath_enabled()) {
+      auto dtype = array.GetBuffer(0)->on_device_shape().element_type();
+      return PyArgSignature(dtype, array.shape(), array.weak_type());
+    }
   }
 
   // Fast-path for the most common case of PyBuffer.

@@ -33,8 +33,8 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "tensorflow/lite/builtin_ops.h"
 #include "tensorflow/lite/c/builtin_op_data.h"
-#include "tensorflow/lite/c/c_api_types.h"
 #include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/core/c/c_api_types.h"
 #include "tensorflow/lite/delegates/gpu/common/custom_parsers.h"
 #include "tensorflow/lite/delegates/gpu/common/data_type.h"
 #include "tensorflow/lite/delegates/gpu/common/lstm_parser.h"
@@ -781,11 +781,10 @@ class CumsumOperationParser : public TFLiteOperationParser {
     const TfLiteTensor* axis_tensor = reader->GetInputTensor(1);
     const TfLiteIntArray* shape = input_tensor->dims;
     const int tflite_axis = GetTensorData<int32_t>(axis_tensor)[0];
-    const Axis axes[4] = {Axis::BATCH, Axis::WIDTH, Axis::HEIGHT,
+    const Axis axes[4] = {Axis::BATCH, Axis::HEIGHT, Axis::WIDTH,
                           Axis::CHANNELS};
     attr.axis = axes[tflite_axis + 4 - shape->size];
     node->operation.type = ToString(OperationType::CUMSUM);
-    Tensor<BHWC, DataType::FLOAT32> inputs;
     node->operation.attributes = std::move(attr);
     RETURN_IF_ERROR(reader->AddInput(node, 0));
     RETURN_IF_ERROR(reader->AddOutputs(node));
@@ -2688,7 +2687,7 @@ class UnpackOperationParser : public TFLiteOperationParser {
       // Adding Identity reshape that will be removed.
       Node* node = graph->NewNode();
       node->operation.type = ToString(OperationType::RESHAPE);
-      RETURN_IF_ERROR(reader->AddInput(node, 1));
+      RETURN_IF_ERROR(reader->AddInput(node, 0));
       RETURN_IF_ERROR(reader->AddOutputs(node));
       // New shape comes from output shape.
       ReshapeAttributes attr;

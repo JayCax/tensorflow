@@ -25,17 +25,19 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_device.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/transforms/passes.h"
-#include "tensorflow/compiler/mlir/tensorflow/transforms/passes_detail.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/tpu_rewrite_device_util.h"
 
 namespace mlir {
 namespace TFTPU {
 namespace {
 
+#define GEN_PASS_DEF_TPUCOLOCATECOMPOSITERESOURCEOPSPASS
+#include "tensorflow/compiler/mlir/tensorflow/transforms/tf_passes.h.inc"
+
 // Pass that co-locates resource ops that use composite device resources
 // (packed tensors) with the underlying physical TPU device.
 struct TPUColocateCompositeResourceOps
-    : public TF::TPUColocateCompositeResourceOpsPassBase<
+    : public impl::TPUColocateCompositeResourceOpsPassBase<
           TPUColocateCompositeResourceOps> {
   void runOnOperation() override;
 };
@@ -80,7 +82,8 @@ llvm::SmallVector<Operation*, 4> GetResourceOpsUsingCompositeArgsInReplicate(
       // Account for pass-through identity ops.
       if (auto pass_through_identity =
               llvm::dyn_cast<TF::IdentityOp>(resource_user)) {
-        for (auto identity_user : pass_through_identity.output().getUsers()) {
+        for (auto identity_user :
+             pass_through_identity.getOutput().getUsers()) {
           new_resource_users.emplace_back(identity_user);
         }
       }

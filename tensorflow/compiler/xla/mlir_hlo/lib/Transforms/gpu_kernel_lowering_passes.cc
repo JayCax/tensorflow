@@ -17,7 +17,7 @@ limitations under the License.
 #include <utility>
 
 #include "mlir-hlo/Transforms/gpu_passes.h"
-#include "mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h"
+#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ComplexToLLVM/ComplexToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
@@ -27,6 +27,7 @@ limitations under the License.
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
+#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
@@ -58,12 +59,13 @@ class GpuKernelToROCDLPass
 
 static void populateCommonPatterns(LLVMTypeConverter& converter,
                                    RewritePatternSet& patterns) {
-  arith::populateArithmeticToLLVMConversionPatterns(converter, patterns);
+  arith::populateArithToLLVMConversionPatterns(converter, patterns);
   populateMathToLLVMConversionPatterns(converter, patterns);
   populateMemRefToLLVMConversionPatterns(converter, patterns);
   populateFuncToLLVMConversionPatterns(converter, patterns);
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   populateComplexToLLVMConversionPatterns(converter, patterns);
+  populateVectorToLLVMConversionPatterns(converter, patterns);
 }
 
 void GpuKernelToNVVMPass::runOnOperation() {

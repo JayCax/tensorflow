@@ -11,14 +11,14 @@ load(
     "//tensorflow:tensorflow.bzl",
     "if_cuda_or_rocm",
 )
-load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")  # buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "tf_kernel_library")  # buildifier: disable=same-origin-load
+load("//tensorflow:tensorflow.default.bzl", "tf_cuda_cc_test", "tf_kernel_library")
 load(
     "//tensorflow/core/platform:build_config_root.bzl",
     "tf_cuda_tests_tags",
 )
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow/core/kernels:__subpackages__",
     ],
@@ -135,7 +135,6 @@ tf_kernel_library(
         ":gpu_asin_kernels",
         ":gpu_asinh_kernels",
         ":gpu_atan_kernels",
-        ":gpu_atanh_kernels",
         ":gpu_ceil_kernels",
         ":gpu_complex_abs_kernels",
         ":gpu_conj_kernels",
@@ -171,7 +170,10 @@ tf_kernel_library(
         ":gpu_tan_kernels",
         ":gpu_tanh_kernels",
         "//third_party/eigen3",
-    ]),
+    ]) + if_mlir_generated_experimental_kernels_enabled(
+        [":gpu_atanh_kernels_experimental"],
+        [":gpu_atanh_kernels"],
+    ),
 )
 
 tf_kernel_library(

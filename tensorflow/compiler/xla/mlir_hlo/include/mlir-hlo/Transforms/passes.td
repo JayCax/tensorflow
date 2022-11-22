@@ -49,7 +49,7 @@ def BufferPacking : Pass<"buffer-packing", "func::FuncOp"> {
   After this sorting, the buffers are checked whether subsequent buffers can be
   packed into them.}];
   let dependentDialects = ["func::FuncDialect","memref::MemRefDialect",
-    "arith::ArithmeticDialect"];
+    "arith::ArithDialect"];
   let constructor = "createBufferPackingPass()";
   let options = [
    Option<"window_size_", "window-size", "unsigned",
@@ -115,6 +115,9 @@ def TestShapeComponentAnalysis : Pass<"test-print-shape-components",
 def LowerIndexCastPass
     : Pass<"lower-index-cast", "mlir::func::FuncOp"> {
   let summary = "Lower index cast on tensors to tensor dialect";
+  let dependentDialects = [
+    "tensor::TensorDialect"
+  ];
   let constructor = "createLowerIndexCastPass()";
 }
 
@@ -163,10 +166,15 @@ def GenericHostToLLVMPass : Pass<"generic-host-to-llvm", "ModuleOp"> {
 def UnbufferizePass : Pass<"unbufferize", "mlir::func::FuncOp"> {
   let summary = "Unbufferize partially bufferized functions.";
   let description = [{
-    Removes bufferization.to_tensor and memref.tensor_store ops that are the 
+    Removes bufferization.to_tensor and memref.tensor_store ops that are the
     result of XLA bufferizing during HLO to MHLO transformation.
   }];
   let constructor = "hlo::createUnbufferizePass()";
+}
+
+def UnrollLoopsPass : Pass<"unroll-loops"> {
+  let summary = "Unrolls scf.for loops with small static iteration counts.";
+  let constructor = "hlo::createUnrollLoopsPass()";
 }
 
 def AllocToArgPass : Pass<"alloc-to-arg", "mlir::func::FuncOp"> {
@@ -179,7 +187,12 @@ def AllocToArgPass : Pass<"alloc-to-arg", "mlir::func::FuncOp"> {
 
 def ScalarizationPass : Pass<"scalarize", "mlir::func::FuncOp"> {
   let summary = "Converts ops on tensors with 1 element to scalar ops.";
-  let dependentDialects = ["tensor::TensorDialect", "arith::ArithmeticDialect"];
+  let dependentDialects = [
+    "arith::ArithDialect",
+    "gml_st::GmlStDialect",
+    "scf::SCFDialect",
+    "tensor::TensorDialect"
+  ];
   let constructor = "createScalarizationPass()";
 }
 

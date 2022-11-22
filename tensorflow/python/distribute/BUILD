@@ -1,10 +1,11 @@
-load("//tensorflow:tensorflow.bzl", "pytype_strict_library")
+load("//tensorflow:pytype.default.bzl", "pytype_strict_library")
 load("//tensorflow:tensorflow.bzl", "py_test", "tf_py_test")
-load("//tensorflow:tensorflow.bzl", "cuda_py_test")
-load("//tensorflow/tsl/platform/default:distribute.bzl", "distribute_py_test")
+load("//tensorflow:tensorflow.default.bzl", "cuda_py_test")
+load("//tensorflow/core/platform:distribute.bzl", "distribute_py_test")
 load("//tensorflow/python/tpu:tpu.bzl", "tpu_py_test")
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow:internal",
         "//third_party/py/keras:__subpackages__",  # TODO(scottzhu): remove this once keras is relying on tf.__internal__.
@@ -636,7 +637,6 @@ py_library(
         ":tpu_util",
         ":tpu_values",
         ":values",
-        "//tensorflow/compiler/xla/experimental/xla_sharding",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:constant_op",
         "//tensorflow/python:control_flow_ops",
@@ -651,6 +651,7 @@ py_library(
         "//tensorflow/python:variables",
         "//tensorflow/python/autograph/core",
         "//tensorflow/python/autograph/impl",
+        "//tensorflow/python/compiler/xla/experimental:xla_sharding",
         "//tensorflow/python/distribute/cluster_resolver:cluster_resolver_lib",
         "//tensorflow/python/distribute/v1:input_lib",
         "//tensorflow/python/eager:context",
@@ -938,12 +939,12 @@ py_library(
     srcs_version = "PY3",
     deps = [
         ":tpu_util",
-        "//tensorflow/compiler/xla/experimental/xla_sharding",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:resource_variable_ops_gen",
         "//tensorflow/python:tpu_partition_ops_gen",
         "//tensorflow/python:variable_scope",
         "//tensorflow/python:variables",
+        "//tensorflow/python/compiler/xla/experimental:xla_sharding",
         "//tensorflow/python/eager:context",
         "//tensorflow/python/framework:for_generated_wrappers",
         "//tensorflow/python/saved_model:save_context",
@@ -2257,6 +2258,7 @@ py_library(
         "//tensorflow/python:framework_ops",
         "//tensorflow/python:tensor_shape",
         "//tensorflow/python:tf_decorator",
+        "//tensorflow/python:util",
         "//tensorflow/python/eager:remote",
         "//tensorflow/python/trackable:base",
         "//tensorflow/python/training:server_lib",
@@ -2306,6 +2308,7 @@ distribute_py_test(
     shard_count = 12,
     tags = [
         "multi_and_single_gpu",
+        "no_oss",  # TODO(b/249822228)
         "noasan",  # TODO(b/237407459)
         "notpu",
         "notsan",  # Tsan failure doesn't seem to be caused by TF.
@@ -2317,6 +2320,7 @@ distribute_py_test(
         ":parameter_server_strategy_v2",
         ":ps_values",
         ":test_util",
+        "//tensorflow:tensorflow_py",
         "//tensorflow/python:dtypes",
         "//tensorflow/python:extra_py_tests_deps",
         "//tensorflow/python:lookup_ops",

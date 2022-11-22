@@ -19,10 +19,10 @@ limitations under the License.
 #include <string>
 #include <utility>
 
-#include "tensorflow/core/protobuf/error_codes.pb.h"
 #include "tensorflow/tsl/platform/status.h"
 #include "tensorflow/tsl/platform/statusor.h"
 #include "tensorflow/tsl/platform/test.h"
+#include "tensorflow/tsl/protobuf/error_codes.pb.h"
 
 // Defines the following utilities:
 //
@@ -95,7 +95,7 @@ limitations under the License.
 //   ...
 //   StatusOr<std::string> message("Hello, world");
 //   EXPECT_THAT(message, IsOk());
-//   Status status = Status::OK();
+//   Status status = OkStatus();
 //   EXPECT_THAT(status, IsOk());
 
 namespace tensorflow {

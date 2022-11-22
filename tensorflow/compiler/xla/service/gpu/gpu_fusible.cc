@@ -21,10 +21,10 @@ limitations under the License.
 #include <stack>
 #include <vector>
 
+#include "tensorflow/compiler/xla/hlo/ir/hlo_computation.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_opcode.h"
 #include "tensorflow/compiler/xla/service/gpu/ir_emission_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_computation.h"
-#include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/service/instruction_fusion.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -107,7 +107,7 @@ bool IsTransposeInputFusion(const HloInstruction& instr) {
 }
 
 bool IsInputFusibleTranspose(const HloInstruction& instr) {
-  return FindTiledTranspose(instr) || IsTransposeInputFusion(instr);
+  return FindAnyTiledTranspose(instr) || IsTransposeInputFusion(instr);
 }
 
 const HloInstruction* GetRealHeroForMultiOutputFusion(
@@ -123,23 +123,44 @@ const HloInstruction* GetRealHeroForMultiOutputFusion(
   // operand of the fusion root, because it has the most constraints.
   for (const auto* inst : fused_expression_root->operands()) {
     if (IsReductionFromOrToContiguousDimensions(*inst) ||
-        FindTiledTranspose(*inst)) {
-      return inst;
+        FindAnyTiledTranspose(*inst)) {
+      return &FindNonTrivialHero(*inst);
     }
   }
   return fused_expression_root->operands()[0];
 }
 
-bool ShapesCompatibleForMultiOutputFusion(const HloInstruction& instr1,
-                                          const HloInstruction& instr2) {
+// Returns whether the output of a fusion with reduction are consistent with
+// `first_reduce`.
+static bool IsFusedReductionOutputConsistent(
+    const HloInstruction* inst, const HloInstruction* first_reduce) {
+  if (IsReductionFromOrToContiguousDimensions(*inst)) {
+    // Shapes, layouts and dimensions must be the same for all reduces
+    // inside of this fusion.
+    return ShapeUtil::EqualIgnoringElementType(first_reduce->shape(),
+                                               inst->shape()) &&
+           ShapeUtil::EqualIgnoringElementType(
+               first_reduce->operand(0)->shape(), inst->operand(0)->shape()) &&
+           ShapeUtil::EqualIgnoringElementType(
+               first_reduce->operand(1)->shape(), inst->operand(1)->shape()) &&
+           first_reduce->dimensions() == inst->dimensions();
+  }
+  return ShapeUtil::CompatibleIgnoringElementType(
+             first_reduce->operand(0)->shape(), inst->shape()) &&
+         LayoutUtil::Equal(first_reduce->operand(0)->shape().layout(),
+                           inst->shape().layout());
+}
+
+FusionDecision ShapesCompatibleForMultiOutputFusion(
+    const HloInstruction& instr1, const HloInstruction& instr2) {
   // Multi-output fusion kernels share a common parallel loop. The loop
   // dimensions are determined by instruction shapes.
   auto get_loop_shape = [&](const HloInstruction* element_instr) {
     // Special-case reduction-to-vector ops: The loop dimensions are determined
     // by the shape of the first operand.
     if (IsReductionFromOrToContiguousDimensions(*element_instr) ||
-        FindTiledTranspose(*element_instr)) {
-      return element_instr->operand(0)->shape();
+        FindAnyTiledTranspose(*element_instr)) {
+      return FindNonTrivialHero(*element_instr).operand(0)->shape();
     }
     return element_instr->shape();
   };
@@ -148,28 +169,46 @@ bool ShapesCompatibleForMultiOutputFusion(const HloInstruction& instr1,
   // root ops should have equal output shapes. An exception are
   // reduction-to-vector ops. Here the input shapes of the reduction (first
   // operand shape) and the reduction dimensions need to match.
-  auto* instr_1 = GetRealHeroForMultiOutputFusion(instr1);
-  auto* instr_2 = GetRealHeroForMultiOutputFusion(instr2);
-  if (IsReductionFromOrToContiguousDimensions(*instr_1) &&
-      IsReductionFromOrToContiguousDimensions(*instr_2) &&
-      !AreFusedReductionOutputsConsistent({instr_1, instr_2}, instr_1)) {
-    return false;
-  } else if (FindTiledTranspose(*instr_1) && FindTiledTranspose(*instr_2) &&
-             (!ShapeUtil::EqualIgnoringElementType(instr_1->shape(),
-                                                   instr_2->shape()) ||
+  const HloInstruction* hero1 = GetRealHeroForMultiOutputFusion(instr1);
+  const HloInstruction* hero2 = GetRealHeroForMultiOutputFusion(instr2);
+
+  bool hero1_is_unnested_reduce =
+      IsReductionFromOrToContiguousDimensions(*hero1);
+  bool hero1_is_unnested_transpose = FindAnyTiledTranspose(*hero1).has_value();
+  bool hero2_is_unnested_reduce =
+      IsReductionFromOrToContiguousDimensions(*hero2);
+  bool hero2_is_unnested_transpose = FindAnyTiledTranspose(*hero2).has_value();
+
+  if (hero1_is_unnested_reduce && hero2_is_unnested_reduce &&
+      !IsFusedReductionOutputConsistent(hero2, hero1)) {
+    return "tiled reductions with different shapes";
+  } else if (hero1_is_unnested_transpose && hero2_is_unnested_transpose &&
+             (!ShapeUtil::EqualIgnoringElementType(hero1->shape(),
+                                                   hero2->shape()) ||
               !ShapeUtil::EqualIgnoringElementType(
-                  instr_1->operand(0)->shape(),
-                  instr_2->operand(0)->shape()))) {
-    return false;
-  } else if ((FindTiledTranspose(*instr_1) &&
-              IsReductionFromOrToContiguousDimensions(*instr_2)) ||
-             (FindTiledTranspose(*instr_2) &&
-              IsReductionFromOrToContiguousDimensions(*instr_1))) {
-    return false;
+                  hero1->operand(0)->shape(), hero2->operand(0)->shape()))) {
+    return "tiled transposes with different shapes";
+  } else if ((hero1_is_unnested_transpose && hero2_is_unnested_reduce) ||
+             (hero1_is_unnested_reduce && hero2_is_unnested_transpose)) {
+    return "MOF-fusion of a transpose and a reduction";
   }
-  // The elementwise output shapes must be the same (including layout).
-  return ShapeUtil::EqualIgnoringElementType(get_loop_shape(instr_1),
-                                             get_loop_shape(instr_2));
+
+  const Shape& l1 = get_loop_shape(hero1);
+  const Shape& l2 = get_loop_shape(hero2);
+
+  // We accept different shapes provided shapes are trivially reshapable.
+  bool accept_unequal_shape =
+      !l1.IsTuple() && !l2.IsTuple() &&
+      (hero1_is_unnested_reduce || hero2_is_unnested_reduce ||
+       hero1_is_unnested_transpose || hero2_is_unnested_transpose);
+
+  if (!ShapeUtil::EqualIgnoringElementType(l1, l2) &&
+      (!accept_unequal_shape ||
+       !ShapeUtil::IsReshapeOrTransposeBitcast(l1, l2,
+                                               /*ignore_element_type=*/true))) {
+    return "different loop shapes";
+  }
+  return {};
 }
 
 bool IsInputFusibleScatter(const HloInstruction& instr) {
@@ -199,7 +238,8 @@ bool IsLoopFusible(const HloInstruction& instr) {
   return instr.IsFusible() &&
          ((instr.IsElementwise() && instr.operand_count() > 0 &&
            instr.opcode() != HloOpcode::kCopy) ||
-          (instr.opcode() == HloOpcode::kCopy && !FindTiledTranspose(instr)) ||
+          (instr.opcode() == HloOpcode::kCopy &&
+           !FindAnyTiledTranspose(instr)) ||
           instr.opcode() == HloOpcode::kBitcast ||
           instr.opcode() == HloOpcode::kBroadcast ||
           instr.opcode() == HloOpcode::kConcatenate ||
@@ -224,7 +264,9 @@ bool IsLoopFusible(const HloInstruction& instr) {
 
 FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
                                          const HloInstruction& consumer) {
-  if (!IsLoopFusible(producer)) {
+  if (!IsLoopFusible(producer) &&
+      !(FindAnyTiledTranspose(producer) &&
+        &FindNonTrivialHero(consumer) == &producer)) {
     return "the producer is not loop-fusible";
   }
 
@@ -235,10 +277,6 @@ FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
   // Skip multiple output fusion. It's not yet supported.
   if (producer.IsMultiOutputFusion()) {
     return "the producer is not fusible as it is a multi-output fusion";
-  }
-
-  if (CreatesHeavyComputation(producer, consumer)) {
-    return "the fusion would create a heavy computation";
   }
 
   // Fuse scalar constants into loop fusion nodes. This reduces the number of
@@ -259,11 +297,11 @@ FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
   return InstructionFusion::ShouldFuseInPlaceOp(&producer, &consumer);
 }
 
-bool IsProducerConsumerMultiOutputFusible(const HloInstruction& producer,
-                                          const HloInstruction& consumer) {
+FusionDecision IsProducerConsumerMultiOutputFusible(
+    const HloInstruction& producer, const HloInstruction& consumer) {
   // Skip multiple output fusion. It's not yet supported.
   if (producer.IsMultiOutputFusion()) {
-    return false;
+    return "Producer is not a multi-output fusion";
   }
 
   // Allowing multi-output fusions that contain in-place operations makes code
@@ -291,21 +329,21 @@ bool IsProducerConsumerMultiOutputFusible(const HloInstruction& producer,
   // contract that describes what multi-output fusion scenarios are supported by
   // codegen and then changing this check to allow exactly those fusions).
   if (!HloDataflowAnalysis::GetInPlaceInputOutputPairs(&producer).empty()) {
-    return false;
+    return "In-place operations are present";
   }
-  if (!IsLoopFusible(producer) || !IsFusibleAsMultiOutputFusionRoot(consumer)) {
-    return false;
+
+  if (!IsLoopFusible(producer)) {
+    return "producer is not loop-fusible";
+  } else if (!IsFusibleAsMultiOutputFusionRoot(consumer)) {
+    return "consumer is not fusible as multi-output-fusion-root";
+  } else if (NoFusionPossible fusible =
+                 !ShapesCompatibleForMultiOutputFusion(producer, consumer)) {
+    return !fusible;
+  } else if (IsPhysicallyTransposing(producer)) {
+    return "producer is physically transposing";
   }
-  if (CreatesHeavyComputation(producer, consumer)) {
-    return false;
-  }
-  if (!ShapesCompatibleForMultiOutputFusion(producer, consumer)) {
-    return false;
-  }
-  if (IsPhysicallyTransposing(producer)) {
-    return false;
-  }
-  return true;
+
+  return {};
 }
 
 // Returns shared memory usage for a given instruction in bytes.
@@ -327,7 +365,7 @@ static int64_t SharedMemoryUsageNoCache(const HloInstruction& instr) {
       // from potential x-tiling).
       return 2 * 32 * 33 * primitive_size * num_variadic;
     }
-  } else if (FindTiledTranspose(instr)) {
+  } else if (FindAnyTiledTranspose(instr)) {
     // Tile size for transposition.
     int64_t primitive_size =
         ShapeUtil::ByteSizeOfPrimitiveType(instr.shape().element_type());
@@ -344,8 +382,7 @@ static int64_t SharedMemoryUsageNoCache(const HloInstruction& instr) {
   return 0;
 }
 
-static int64_t SharedMemoryUsage(const HloInstruction& instr,
-                                 FusionInfoCache* cache = nullptr) {
+int64_t SharedMemoryUsage(const HloInstruction& instr, FusionInfoCache* cache) {
   if (!cache) {
     return SharedMemoryUsageNoCache(instr);
   }

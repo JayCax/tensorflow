@@ -313,6 +313,10 @@ bool IsHostMemoryArg(const EagerOperation& op, const NodeDef* node_def,
   const auto& host_memory_args = kernel_def->host_memory_arg();
   const OpDef& op_def = OpRegistry::Global()->LookUp(op.Name())->op_def;
   const int arg_id = OpPortIdToArgId(*node_def, op_def.input_arg(), port_id);
+  // Fail if argument ID not found.
+  if (arg_id < 0) {
+    return false;
+  }
   return std::find(host_memory_args.begin(), host_memory_args.end(),
                    op_def.input_arg(arg_id).name()) != host_memory_args.end();
 }
@@ -1216,7 +1220,7 @@ Status GetOrCreateKernelAndDevice(
 
       ctx.reuse_rendezvous_for_functions_mu()->lock();
       ctx.SetReuseRendezvousForFunctions(reuse_rendezvous_for_functions);
-      auto rendezvous_creator = ctx.RendezvousCreator();
+      auto rendezvous_creator = ctx.RendezvousFactory();
       ctx.SetReuseRendezvousForFunctions(
           reuse_rendezvous_for_functions_original_value);
       ctx.reuse_rendezvous_for_functions_mu()->unlock();
@@ -1844,7 +1848,7 @@ Status EagerKernelExecute(
   // device. We don't call it now because it is an unneeded overhead (it
   // acquires a lock) and we can't recover from errors anyway.
   ScopedStepContainer* container = ctx->StepContainer();
-  CoordinationServiceAgent* coord_agent = nullptr;
+  tsl::CoordinationServiceAgent* coord_agent = nullptr;
 #if !defined(IS_MOBILE_PLATFORM)
   if (ctx->GetDistributedManager() != nullptr)
     coord_agent = ctx->GetDistributedManager()->GetCoordinationServiceAgent();
@@ -2052,7 +2056,7 @@ void EagerKernelExecuteAsync(
     done(s);
     return;
   }
-  CoordinationServiceAgent* coord_agent = nullptr;
+  tsl::CoordinationServiceAgent* coord_agent = nullptr;
 #if !defined(IS_MOBILE_PLATFORM)
   if (ctx->GetDistributedManager() != nullptr)
     coord_agent = ctx->GetDistributedManager()->GetCoordinationServiceAgent();

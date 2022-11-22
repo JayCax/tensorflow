@@ -32,6 +32,7 @@ limitations under the License.
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
+#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/lib/math/math_util.h"
 #include "tensorflow/core/platform/errors.h"
@@ -169,6 +170,10 @@ bool ShardVector::ContainsShard(const Shard& shard) const {
   for (const auto& shard_in_vec : shards)
     if (shard_in_vec == shard) return true;
   return false;
+}
+
+bool IsDynamicSize(int64_t size) {
+  return size == mlir::ShapedType::isDynamic(size) || size == -1;
 }
 
 // static
@@ -395,6 +400,12 @@ bool Mesh::IsMeshDim(const std::string& dim_name) const {
   for (const auto& mesh_dim : dims())
     if (dim_name == mesh_dim.name) return true;
   return false;
+}
+
+std::vector<std::string> Mesh::MeshDimNames() const {
+  std::vector<std::string> mesh_names;
+  for (const auto& mesh_dim : dims()) mesh_names.push_back(mesh_dim.name);
+  return mesh_names;
 }
 
 int Mesh::GetMeshDimIndexWithName(const std::string& mesh_name) const {
@@ -656,6 +667,42 @@ StatusOr<int32> Mesh::idx_for_dim(absl::string_view dim_name) const {
   }
   return errors::InvalidArgument("dim name :", dim_name,
                                  " does not exist on mesh : ", ToString());
+}
+
+Mesh Mesh::CreateMesh(
+    const std::string& mesh_name, const std::vector<std::string>& dim_names,
+    const std::vector<std::int64_t>& global_device_ids_shape,
+    const std::vector<std::int64_t>& global_device_ids_flatten,
+    const std::vector<std::string>& global_devices_str,
+    const std::vector<std::int64_t>& local_device_ids,
+    const std::vector<std::string>& local_devices_str) {
+  Mesh mesh;
+  mesh.name_ = mesh_name;
+
+  mesh.mesh_dims_.resize(dim_names.size());
+
+  for (int i = 0; i < dim_names.size(); ++i) {
+    mesh.mesh_dims_[i].name = dim_names[i];
+    mesh.mesh_dims_[i].size = global_device_ids_shape[i];
+  }
+
+  for (const auto& id : global_device_ids_flatten) {
+    mesh.global_device_ids_.push_back(id);
+  }
+
+  for (const auto& d : global_devices_str) {
+    mesh.global_devices_.push_back(d);
+  }
+
+  for (const auto& id : local_device_ids) {
+    mesh.local_device_ids_.push_back(id);
+  }
+
+  for (const auto& d : local_devices_str) {
+    mesh.local_devices_.push_back(d);
+  }
+
+  return mesh;
 }
 
 StatusOr<Layout> Layout::GetLayout(
@@ -976,7 +1023,9 @@ std::vector<int64_t> Layout::GlobalShapeFromLocalShape(
   for (int i = 0; i < sharding_specs().size(); ++i) {
     int64_t l_shape = local_shape.empty() ? 1 : local_shape[i];
     int64_t dim_shards = num_shards()[i];
-    global_shape.emplace_back(l_shape * dim_shards);
+    int64_t global_size =
+        IsDynamicSize(l_shape) ? l_shape : l_shape * dim_shards;
+    global_shape.emplace_back(global_size);
   }
   return global_shape;
 }
@@ -991,7 +1040,10 @@ std::vector<int64_t> Layout::LocalShapeFromGlobalShape(
   for (int i = 0; i < sharding_specs().size(); ++i) {
     int64_t dim_shards = shards[i];
     // TODO(hthu): Shape might not be always divisible.
-    local_shape.emplace_back(global_shape[i] / dim_shards);
+    int64_t local_size = IsDynamicSize(global_shape[i])
+                             ? global_shape[i]
+                             : global_shape[i] / dim_shards;
+    local_shape.emplace_back(local_size);
   }
   return local_shape;
 }
@@ -1005,7 +1057,9 @@ PartialTensorShape Layout::LocalShapeFromGlobalShape(
   PartialTensorShape local_shape({});
   for (int spec_index = 0; spec_index < sharding_specs().size(); ++spec_index) {
     int64_t dim_size = global_shape.dim_size(spec_index);
-    local_shape.AddDim(dim_size == -1 ? -1 : dim_size / shards[spec_index]);
+    int64_t local_size =
+        IsDynamicSize(dim_size) ? dim_size : dim_size / shards[spec_index];
+    local_shape.AddDim(local_size);
   }
   return local_shape;
 }

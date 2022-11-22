@@ -44,6 +44,10 @@ limitations under the License.
 namespace tensorflow {
 namespace dtensor {
 
+// Returns true if `size` is a dynamic size based on either MLIR and TF
+// standards.
+bool IsDynamicSize(int64_t size);
+
 // The location of a device in a mesh.
 //
 // Each device has a unique location in the mesh, which is indicated by the
@@ -95,6 +99,15 @@ class Mesh {
   static Mesh Empty();
   bool IsEmpty() const;
   Mesh() = default;
+
+  // Creates fully defined mesh.
+  static Mesh CreateMesh(
+      const std::string& mesh_name, const std::vector<std::string>& dim_names,
+      const std::vector<std::int64_t>& global_device_ids_shape,
+      const std::vector<std::int64_t>& global_device_ids_flatten,
+      const std::vector<std::string>& global_devices_str,
+      const std::vector<std::int64_t>& local_device_ids,
+      const std::vector<std::string>& local_devices_str);
 
   // Parses from MeshProto.
   static StatusOr<Mesh> ParseFromProto(const MeshProto& proto);
@@ -179,6 +192,7 @@ class Mesh {
   // `mesh_name`.
   int GetMeshDimIndexWithName(const std::string& mesh_name) const;
   bool IsMeshDim(const std::string& dim_name) const;
+  std::vector<std::string> MeshDimNames() const;
 
   int64 rank() const;
   int64 size() const;

@@ -1,7 +1,11 @@
-load("//tensorflow:tensorflow.bzl", "py_strict_test")
+load("//tensorflow:strict.default.bzl", "py_strict_test")
 
 package(
-    default_visibility = ["//tensorflow/core/function/capture:__subpackages__"],
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+    default_visibility = [
+        "//tensorflow/core/function/capture:__subpackages__",
+        "//tensorflow/python/eager/polymorphic_function:__subpackages__",
+    ],
 )
 
 py_library(
@@ -11,8 +15,9 @@ py_library(
     ],
     srcs_version = "PY3",
     deps = [
-        "//tensorflow:tensorflow_py",
         "//tensorflow/python:util",
+        "//tensorflow/python/autograph/pyct",
+        "//tensorflow/python/autograph/pyct/static_analysis",
     ],
 )
 
@@ -25,6 +30,7 @@ py_strict_test(
     ],
     deps = [
         ":free_vars_detect",
+        "//tensorflow/python/util:tf_decorator",
         "//third_party/py/numpy",
         "@absl_py//absl/testing:parameterized",
     ],

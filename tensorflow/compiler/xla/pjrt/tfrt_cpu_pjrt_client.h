@@ -45,7 +45,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_module_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
-#include "tensorflow/core/profiler/lib/traceme.h"
+#include "tensorflow/tsl/profiler/lib/traceme.h"
 #include "tfrt/host_context/async_value_ref.h"  // from @tf_runtime
 
 namespace xla {
@@ -162,23 +162,17 @@ class TfrtCpuClient final : public PjRtClient {
       const PjRtLoadedExecutable& executable) const override;
 
   StatusOr<std::string> SerializeExecutable(
-      const PjRtLoadedExecutable& executable) const override {
-    return Unimplemented("SerializeExecutable not implemented on %s",
-                         platform_name());
-  }
+      const PjRtLoadedExecutable& executable) const override;
 
   StatusOr<std::unique_ptr<PjRtLoadedExecutable>> DeserializeExecutable(
-      absl::string_view serialized, CompileOptions options) override {
-    return Unimplemented("DeserializeExecutable not implemented on %s",
-                         platform_name());
-  }
+      absl::string_view serialized, CompileOptions options) override;
 
   StatusOr<std::unique_ptr<PjRtBuffer>> CreateUninitializedBuffer(
       const Shape& shape, PjRtDevice* device) override;
 
-  StatusOr<std::unique_ptr<PjRtClient::AsyncBufferTransferManager>>
-  CreateBuffersForAsyncTransfer(absl::Span<const Shape> shapes,
-                                PjRtDevice* device) override {
+  StatusOr<std::unique_ptr<PjRtClient::AsyncHostToDeviceTransferManager>>
+  CreateBuffersForAsyncHostToDevice(absl::Span<const Shape> shapes,
+                                    PjRtDevice* device) override {
     return Unimplemented("Async transfer to buffers not implemented");
   };
 
@@ -555,6 +549,8 @@ class TfrtCpuExecutable final : public PjRtLoadedExecutable {
 
   StatusOr<std::optional<std::string>> Fingerprint() const;
 
+  std::shared_ptr<Executable> cpu_executable() const { return cpu_executable_; }
+
  private:
   friend class TfrtCpuClient;
 
@@ -563,7 +559,8 @@ class TfrtCpuExecutable final : public PjRtLoadedExecutable {
   // Checks that the input buffers passed in by the user have the correct size
   // on device for the compiled program.
   Status CheckBufferCompatibilities(
-      absl::Span<TrackedTfrtCpuDeviceBuffer* const> input_buffers) const;
+      absl::Span<std::pair<bool, TrackedTfrtCpuDeviceBuffer*> const>
+          input_buffers) const;
 
   StatusOr<Result> ExecuteHelper(
       absl::Span<PjRtBuffer* const> argument_handles, int replica,

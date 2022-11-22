@@ -18,8 +18,8 @@ limitations under the License.
 #include <string>
 
 #include "absl/strings/str_cat.h"
-#include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/compiler/xla/service/hlo_opcode.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_opcode.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/tsl/platform/test.h"
@@ -615,23 +615,37 @@ TEST_F(PatternMatcherTest, CustomCallTargetMatcherDescribeAndExplain) {
 
   auto* root = hlo_module->entry_computation()->root_instruction();
   EXPECT_TRUE(Match(root, match::Op().WithCustomCallTarget("test_target")));
+  EXPECT_TRUE(Match(
+      root, match::Op().WithCustomCallTarget({"test_target", "other_target"})));
+  EXPECT_TRUE(Match(
+      root, match::Op().WithCustomCallTarget({"other_target", "test_target"})));
   EXPECT_FALSE(Match(root, match::Op().WithCustomCallTarget("other_target")));
+  EXPECT_FALSE(Match(root, match::Op().WithCustomCallTarget(
+                               {"other_target", "other_target2"})));
 
   EXPECT_DESC_AND_EXPLANATION(
       root, match::Op().WithCustomCallTarget("other_target"),
       "an HloInstruction custom call with target 'other_target'",
       "HloInstruction is not a custom call with a target 'other_target'\nin "
       "out = f32[] custom-call(), custom_call_target=\"test_target\"");
+
+  EXPECT_DESC_AND_EXPLANATION(
+      root, match::Op().WithCustomCallTarget({"other_target", "other_target2"}),
+      "an HloInstruction custom call with target in {other_target, "
+      "other_target2}",
+      "HloInstruction is not a custom call with a target in {other_target, "
+      "other_target2}\nin "
+      "out = f32[] custom-call(), custom_call_target=\"test_target\"");
 }
 
 TEST_F(PatternMatcherTest, ShapeDescribeToAndExplain) {
-  auto shape = ShapeUtil::MakeShapeWithLayout(F32, {1, 2}, {0, 1});
+  auto shape = ShapeUtil::MakeShapeWithDenseLayout(F32, {1, 2}, {0, 1});
   auto layout = shape.layout();
 
   EXPECT_DESC_AND_EXPLANATION(static_cast<const Shape*>(nullptr), m::Shape(),
                               "a shape", "Shape is null");
   EXPECT_DESC_AND_EXPLANATION(
-      ShapeUtil::MakeShapeWithLayout(F32, {1, 2}, {1, 0}),
+      ShapeUtil::MakeShapeWithDenseLayout(F32, {1, 2}, {1, 0}),
       m::Shape().EqualTo(&shape), "a shape equal to f32[1,2]{0,1}",
       "Shape not equal to f32[1,2]{0,1}\n"
       "in f32[1,2]{1,0}");
@@ -682,7 +696,7 @@ TEST_F(PatternMatcherTest, ShapeDescribeToAndExplain) {
                               "Shape is not an array\n"
                               "in ()");
   EXPECT_DESC_AND_EXPLANATION(
-      ShapeUtil::MakeShapeWithLayout(F32, {1, 2}, {1, 0}),
+      ShapeUtil::MakeShapeWithDenseLayout(F32, {1, 2}, {1, 0}),
       m::Shape().WithLayoutEqualTo(&layout),
       "a shape with\n  a layout equal to {0,1}",
       "Layout {1,0} is not equal to expected {0,1}\n"
@@ -1085,6 +1099,13 @@ TEST_F(PatternMatcherTest, CustomCallMatchers) {
   EXPECT_TRUE(Match(
       root, m::CustomCall("test_target", m::Parameter(0), m::Parameter(1))));
 
+  EXPECT_TRUE(Match(root, m::CustomCall({"test_target", "other_target"})));
+  EXPECT_TRUE(Match(root, m::CustomCall({"other_target", "test_target"})));
+  EXPECT_TRUE(Match(root, m::CustomCall({"test_target", "other_target"},
+                                        m::Parameter(0), m::Parameter(1))));
+  EXPECT_TRUE(Match(root, m::CustomCall({"other_target", "test_target"},
+                                        m::Parameter(0), m::Parameter(1))));
+
   HloInstruction* instr;
   EXPECT_TRUE(Match(root, m::CustomCall(&instr)));
   EXPECT_TRUE(Match(root, m::CustomCall(&instr, "test_target")));
@@ -1098,6 +1119,7 @@ TEST_F(PatternMatcherTest, CustomCallMatchers) {
                                         m::Parameter(0), m::Parameter(1))));
 
   EXPECT_FALSE(Match(root, m::CustomCall("other_target")));
+  EXPECT_FALSE(Match(root, m::CustomCall({"other_target", "other_target2"})));
   EXPECT_FALSE(Match(
       root, m::CustomCall("test_target", m::Parameter(1), m::Parameter(0))));
 }

@@ -298,15 +298,15 @@ mlir::LogicalResult InsertLayoutsForDTensorLayout(
           .walk([&](mlir::TF::DTensorLayout op) -> mlir::WalkResult {
             // Check there are no "Layout::kAny" or "kMatch" specs in the
             // layouts.
-            for (const std::string& spec : op.layout().sharding_spec_strs())
+            for (const std::string& spec : op.getLayout().sharding_spec_strs())
               if (spec == Layout::kAny || spec == Layout::kMatch)
                 return op->emitOpError()
                        << "found " << spec
                        << " as a sharding spec which is not allowed";
             // Insert layout.
-            producer_request[op.input()].emplace(op.layout());
-            is_updated.insert(op.input());
-            is_locked.insert(op.input());
+            producer_request[op.getInput()].emplace(op.getLayout());
+            is_updated.insert(op.getInput());
+            is_locked.insert(op.getInput());
             return mlir::WalkResult::advance();
           })
           .wasInterrupted());
@@ -705,7 +705,8 @@ mlir::LogicalResult InsertDTensorLayoutOps(
                                          merged_layout.second),
           mlir::TF::ShapeAttr::get(builder.getContext(), type));
       llvm::SmallPtrSet<mlir::Operation*, 4> exception{layout_op};
-      merged_layout.first.replaceAllUsesExcept(layout_op.output(), exception);
+      merged_layout.first.replaceAllUsesExcept(layout_op.getOutput(),
+                                               exception);
     } else {
       mlir::emitError(merged_layout.first.getLoc())
           << "value type is not TensorType as expected.";
@@ -769,6 +770,12 @@ class LayoutPrinter : public mlir::OpAsmPrinter {
     os_ << "\n";
     os_.indent(indent_level_);
   }
+
+  /// Increase indentation.
+  void increaseIndent() override { indent_level_ += 2; }
+
+  /// Decrease indentation.
+  void decreaseIndent() override { indent_level_ -= 2; }
 
   // Note that we ignore the parameters printEntryBlockArgs and
   // printBlockTerminators for simplicity.
@@ -838,6 +845,8 @@ class LayoutPrinter : public mlir::OpAsmPrinter {
 
     os_ << "\n";
   }
+
+  void printCustomOrGenericOp(mlir::Operation* op) override { print(*op); }
 
   // Print an operand, this could be both the OpResult or a BlockArgument.
   // We also print the layout if it exists and the type.
@@ -934,25 +943,27 @@ class LayoutPrinter : public mlir::OpAsmPrinter {
 
   // The following functions are part of the printing interface but aren't
   // needed for the compact printing form for Layout printing.
-  void printAttributeWithoutType(mlir::Attribute attr) override{};
-  void printSuccessor(mlir::Block* successor) override{};
+  void printAttributeWithoutType(mlir::Attribute attr) override {}
+  void printSuccessor(mlir::Block* successor) override {}
   void printSuccessorAndUseList(mlir::Block* successor,
-                                mlir::ValueRange succOperands) override{};
+                                mlir::ValueRange succOperands) override {}
   void printOptionalAttrDict(
       llvm::ArrayRef<mlir::NamedAttribute> attrs,
-      llvm::ArrayRef<llvm::StringRef> elidedAttrs) override{};
+      llvm::ArrayRef<llvm::StringRef> elidedAttrs) override {}
   void printOptionalAttrDictWithKeyword(
       llvm::ArrayRef<mlir::NamedAttribute> attrs,
-      llvm::ArrayRef<llvm::StringRef> elidedAttrs) override{};
+      llvm::ArrayRef<llvm::StringRef> elidedAttrs) override {}
 
   void shadowRegionArgs(mlir::Region& region,
-                        mlir::ValueRange namesToUse) override{};
+                        mlir::ValueRange namesToUse) override {}
   void printAffineMapOfSSAIds(mlir::AffineMapAttr mapAttr,
-                              mlir::ValueRange operands) override{};
+                              mlir::ValueRange operands) override {}
 
   void printAffineExprOfSSAIds(mlir::AffineExpr expr,
                                mlir::ValueRange dimOperands,
-                               mlir::ValueRange symOperands) override{};
+                               mlir::ValueRange symOperands) override {}
+
+  void printOptionalLocationSpecifier(mlir::Location loc) override {}
 
  private:
   int indent_level_;
@@ -1025,20 +1036,20 @@ mlir::LogicalResult ReplaceAuxiliaryDTensorLayoutOpsWithIdentity(
   module.walk([&](mlir::TF::DTensorLayout op) { layout_ops.emplace_back(op); });
 
   for (auto layout_op : llvm::reverse(layout_ops)) {
-    auto input_op = layout_op.input().getDefiningOp();
+    auto input_op = layout_op.getInput().getDefiningOp();
     if (auto input_layout_op =
             llvm::dyn_cast_or_null<mlir::TF::DTensorLayout>(input_op)) {
       // Check that layout of input DTensorLayout op is equivalent to
       // the layout of its connected DTensorLayout op.
-      if (layout_op.layout() != input_layout_op.layout())
+      if (layout_op.getLayout() != input_layout_op.getLayout())
         return layout_op.emitOpError(
             "Found inconsistent layout. This should never happen.");
 
       // Replace DTensorLayout op with identity op.
       mlir::OpBuilder builder(layout_op);
       auto identity = builder.create<mlir::TF::IdentityOp>(
-          layout_op->getLoc(), layout_op.getType(), layout_op.input());
-      layout_op.output().replaceAllUsesWith(identity.output());
+          layout_op->getLoc(), layout_op.getType(), layout_op.getInput());
+      layout_op.getOutput().replaceAllUsesWith(identity.getOutput());
       layout_op.erase();
     }
   }
@@ -1059,12 +1070,12 @@ mlir::LogicalResult InsertDTensorLayoutForIfRegionOp(
   for (mlir::TF::IfRegionOp if_op : if_ops) {
     for (mlir::OpResult if_result : if_op.getResults()) {
       const int result_index = if_result.getResultNumber();
-      mlir::Value then_branch_result = if_op.then_branch()
+      mlir::Value then_branch_result = if_op.getThenBranch()
                                            .front()
                                            .getTerminator()
                                            ->getOpOperand(result_index)
                                            .get();
-      mlir::Value else_branch_result = if_op.else_branch()
+      mlir::Value else_branch_result = if_op.getElseBranch()
                                            .front()
                                            .getTerminator()
                                            ->getOpOperand(result_index)
@@ -1076,9 +1087,9 @@ mlir::LogicalResult InsertDTensorLayoutForIfRegionOp(
           *then_branch_result.getDefiningOp());
       auto else_result_layout = llvm::dyn_cast<mlir::TF::DTensorLayout>(
           *else_branch_result.getDefiningOp());
-      llvm::SmallVector<Layout, 4> layouts{if_result_layout.layout(),
-                                           then_result_layout.layout(),
-                                           else_result_layout.layout()};
+      llvm::SmallVector<Layout, 4> layouts{if_result_layout.getLayout(),
+                                           then_result_layout.getLayout(),
+                                           else_result_layout.getLayout()};
       std::set<Layout> layouts_set{layouts.begin(), layouts.end()};
       if (layouts_set.size() == 1) continue;
 
@@ -1143,13 +1154,13 @@ mlir::LogicalResult InsertRelayoutForWhileLoops(
     mlir::OpBuilder& builder) {
   for (mlir::TF::WhileRegionOp op : while_ops) {
     // Get the terminator so we can check the output layouts of the loop body.
-    mlir::Operation* yield_op = op.body().front().getTerminator();
+    mlir::Operation* yield_op = op.getBody().front().getTerminator();
     if (!mlir::isa<mlir::TF::YieldOp>(yield_op))
       return op->emitOpError() << "body terminator is not a Yield op.";
 
-    for (int i = 0; i < op.body().getNumArguments(); ++i) {
+    for (int i = 0; i < op.getBody().getNumArguments(); ++i) {
       // Inputs should only have one, a DTensorLayout op.
-      mlir::Value argument = op.body().getArgument(i);
+      mlir::Value argument = op.getBody().getArgument(i);
       if (!argument.hasOneUse())
         return op.emitOpError()
                << "body argument " << i << " doesn't have a single use.";
@@ -1158,7 +1169,7 @@ mlir::LogicalResult InsertRelayoutForWhileLoops(
         return op.emitOpError() << "body argument " << i
                                 << " is not consumed by a DTensorLayout op.";
       const Layout input_layout =
-          mlir::cast<mlir::TF::DTensorLayout>(input_layout_op).layout();
+          mlir::cast<mlir::TF::DTensorLayout>(input_layout_op).getLayout();
 
       // Inputs to Yield should also be a DTensorLayout op.
       if (!yield_op->getOperand(i).isa<mlir::OpResult>() ||
@@ -1169,7 +1180,7 @@ mlir::LogicalResult InsertRelayoutForWhileLoops(
       mlir::Operation* output_layout_op =
           yield_op->getOperand(i).getDefiningOp();
       const Layout output_layout =
-          mlir::cast<mlir::TF::DTensorLayout>(output_layout_op).layout();
+          mlir::cast<mlir::TF::DTensorLayout>(output_layout_op).getLayout();
 
       // If the layouts are equal we have nothing to do. Note that this caches
       // the case that that input and output are a resource, since the layout
@@ -1190,11 +1201,11 @@ mlir::LogicalResult InsertRelayoutForWhileLoops(
               yield_op->getOperand(i), input_layout.ToString());
       mlir::TF::DTensorLayout first_layout_op =
           builder.create<mlir::TF::DTensorLayout>(
-              op.getLoc(), first_relayout.output(),
+              op.getLoc(), first_relayout.getOutput(),
               mlir::dtensor::LayoutAttr::get(builder.getContext(),
                                              input_layout),
               global_shape);
-      yield_op->setOperand(i, first_layout_op.output());
+      yield_op->setOperand(i, first_layout_op.getOutput());
 
       // Insert the second relayout op after the loop itself.
       builder.setInsertionPointAfter(op);
@@ -1206,11 +1217,11 @@ mlir::LogicalResult InsertRelayoutForWhileLoops(
               global_shape);
       mlir::TF::RelayoutOp second_relayout =
           builder.create<mlir::TF::RelayoutOp>(
-              op.getLoc(), second_layout_op.output().getType(),
-              second_layout_op.output(), output_layout.ToString());
+              op.getLoc(), second_layout_op.getOutput().getType(),
+              second_layout_op.getOutput(), output_layout.ToString());
       op->getResult(i).replaceAllUsesExcept(
-          second_relayout.output(), llvm::SmallPtrSet<mlir::Operation*, 1>{
-                                        second_layout_op.getOperation()});
+          second_relayout.getOutput(), llvm::SmallPtrSet<mlir::Operation*, 1>{
+                                           second_layout_op.getOperation()});
     }
   }
   return mlir::success();

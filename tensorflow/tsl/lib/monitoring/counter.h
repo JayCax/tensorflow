@@ -61,7 +61,7 @@ class Counter {
     return &default_counter_cell_;
   }
 
-  Status GetStatus() { return Status::OK(); }
+  Status GetStatus() { return OkStatus(); }
 
  private:
   Counter() {}
@@ -180,14 +180,14 @@ class Counter {
 
   Status status_;
 
+  using LabelArray = std::array<string, NumLabels>;
+  std::map<LabelArray, CounterCell> cells_ TF_GUARDED_BY(mu_);
+
   // The metric definition. This will be used to identify the metric when we
   // register it for collection.
   const MetricDef<MetricKind::kCumulative, int64_t, NumLabels> metric_def_;
 
   std::unique_ptr<CollectionRegistry::RegistrationHandle> registration_handle_;
-
-  using LabelArray = std::array<string, NumLabels>;
-  std::map<LabelArray, CounterCell> cells_ TF_GUARDED_BY(mu_);
 
   TF_DISALLOW_COPY_AND_ASSIGN(Counter);
 };

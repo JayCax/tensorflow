@@ -1,11 +1,15 @@
-load("//tensorflow:tensorflow.bzl", "filegroup")
-load("//tensorflow:tensorflow.bzl", "tf_cc_tests")
+load("//tensorflow/tsl:tsl.default.bzl", "filegroup")
 load(
-    "//tensorflow/core/platform:rules_cc.bzl",
+    "//tensorflow/tsl/platform:build_config.bzl",
+    "tsl_cc_test",
+)
+load(
+    "//tensorflow/tsl/platform:rules_cc.bzl",
     "cc_library",
 )
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         # tensorflow/core:lib effectively exposes all targets under tensorflow/core/lib/**
         "//tensorflow/core:__pkg__",
@@ -15,6 +19,7 @@ package(
         # tensorflow/core/framework uses map_util, and flatmap
         "//tensorflow/core/framework:__pkg__",
         "//tensorflow/tsl/framework:__pkg__",
+        "//tensorflow/tsl/platform/cloud:__pkg__",
         # tensorflow/core/util uses inlined_vector
         "//tensorflow/core/util:__pkg__",
         # tensorflow/core/tfrt/utils uses inlined_vector
@@ -23,6 +28,7 @@ package(
         "//tensorflow/examples/custom_ops_doc/simple_hash_table:__pkg__",
         "//tensorflow/compiler/xla:__subpackages__",
         "//tensorflow/core/lib/gtl:__subpackages__",
+        "//tensorflow/tsl/distributed_runtime/rpc:__pkg__",
         "//tensorflow/tsl/profiler/utils:__pkg__",
     ],
     licenses = ["notice"],
@@ -34,6 +40,17 @@ cc_library(
     name = "compactptrset",
     hdrs = ["compactptrset.h"],
     deps = [":flatset"],
+)
+
+cc_library(
+    name = "flatmap",
+    hdrs = ["flatmap.h"],
+    deps = [
+        ":flatrep",
+        "//tensorflow/tsl/platform:hash",
+        "//tensorflow/tsl/platform:logging",
+        "//tensorflow/tsl/platform:types",
+    ],
 )
 
 cc_library(
@@ -93,6 +110,7 @@ filegroup(
     name = "legacy_lib_gtl_headers",
     srcs = [
         "compactptrset.h",
+        "flatmap.h",
         "flatset.h",
         "inlined_vector.h",
         "iterator_range.h",
@@ -139,6 +157,7 @@ filegroup(
 filegroup(
     name = "mobile_srcs_no_runtime",
     srcs = [
+        "flatmap.h",
         "flatrep.h",
         "inlined_vector.h",
     ],
@@ -168,6 +187,7 @@ filegroup(
     name = "legacy_lib_gtl_all_headers",
     srcs = [
         "compactptrset.h",
+        "flatmap.h",
         "flatrep.h",
         "flatset.h",
         "inlined_vector.h",
@@ -182,10 +202,11 @@ filegroup(
     ],
 )
 
-tf_cc_tests(
+tsl_cc_test(
     name = "tsl_lib_gtl_tests",
     srcs = [
         "compactptrset_test.cc",
+        "flatmap_test.cc",
         "flatset_test.cc",
         "int_type_test.cc",
         "iterator_range_test.cc",
@@ -193,14 +214,15 @@ tf_cc_tests(
     ],
     deps = [
         ":compactptrset",
+        ":flatmap",
         ":flatset",
         ":int_type",
         ":iterator_range",
         ":map_util",
-        "//tensorflow/core/platform:test_main",
         "//tensorflow/tsl/platform:hash",
         "//tensorflow/tsl/platform:macros",
         "//tensorflow/tsl/platform:test",
+        "//tensorflow/tsl/platform:test_main",
         "//tensorflow/tsl/platform:types",
     ],
 )

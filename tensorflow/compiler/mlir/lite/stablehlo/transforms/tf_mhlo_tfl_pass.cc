@@ -23,7 +23,7 @@ limitations under the License.
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"  // from @llvm-project
+#include "mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/Dialect/Shape/IR/Shape.h"  // from @llvm-project
 #include "mlir/Dialect/Tensor/IR/Tensor.h"  // from @llvm-project
@@ -49,9 +49,9 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_dialect.h"
 #include "tensorflow/compiler/mlir/tensorflow/transforms/lower_tf.h"
 #include "tensorflow/compiler/mlir/xla/transforms/passes.h"
-#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/mhlo/IR/hlo_ops.h"
-#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/mhlo/IR/register.h"
-#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/mhlo/transforms/rewriters.h"
+#include "tensorflow/compiler/xla/mlir_hlo/mhlo/IR/hlo_ops.h"
+#include "tensorflow/compiler/xla/mlir_hlo/mhlo/IR/register.h"
+#include "tensorflow/compiler/xla/mlir_hlo/mhlo/transforms/rewriters.h"
 
 namespace mlir {
 namespace TFL {
@@ -128,7 +128,7 @@ class TFMhloTFLPass
   void getDependentDialects(DialectRegistry &registry) const override {
     mlir::mhlo::registerAllMhloDialects(registry);
     mlir::stablehlo::registerAllDialects(registry);
-    registry.insert<mlir::arith::ArithmeticDialect, mlir::func::FuncDialect,
+    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
                     mlir::TFL::TensorFlowLiteDialect>();
   }
 
@@ -176,7 +176,7 @@ void TFMhloTFLPass::runOnOperation() {
   target.addIllegalDialect<shape::ShapeDialect>();
   target.addIllegalDialect<::mlir::mhlo::MhloDialect>();
   // Final expected dialects.
-  target.addLegalDialect<arith::ArithmeticDialect>();
+  target.addLegalDialect<arith::ArithDialect>();
   target.addLegalDialect<func::FuncDialect>();
   target.addLegalDialect<TFL::TensorFlowLiteDialect>();
 

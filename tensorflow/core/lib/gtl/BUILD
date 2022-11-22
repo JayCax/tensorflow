@@ -1,10 +1,11 @@
-load("//tensorflow:tensorflow.bzl", "filegroup")
+load("//tensorflow:tensorflow.default.bzl", "filegroup")
 load(
     "//tensorflow/core/platform:rules_cc.bzl",
     "cc_library",
 )
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         # tensorflow/core:lib effectively exposes all targets under tensorflow/core/lib/**
         "//tensorflow/core:__pkg__",
@@ -43,6 +44,7 @@ cc_library(
 cc_library(
     name = "cleanup",
     hdrs = ["cleanup.h"],
+    visibility = ["//visibility:public"],
     deps = ["//tensorflow/core/platform:macros"],
 )
 
@@ -79,6 +81,7 @@ cc_library(
         "//tensorflow/core/lib/hash",
         "//tensorflow/core/platform:logging",
         "//tensorflow/core/platform:types",
+        "//tensorflow/tsl/lib/gtl:flatmap",
     ],
 )
 
@@ -277,7 +280,6 @@ filegroup(
     srcs = [
         "cleanup_test.cc",
         "edit_distance_test.cc",
-        "flatmap_test.cc",
         "manual_constructor_test.cc",
         "top_n_test.cc",
     ],

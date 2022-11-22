@@ -27,6 +27,9 @@ namespace gpu {
 class GPUModuleOp;
 }  // namespace gpu
 
+#define GEN_PASS_DECL
+#include "mlir-hlo/Transforms/gpu_passes.h.inc"
+
 // Create a pass which lowers a subset of lmhlo.fusion ops to gpu.launch_func
 // plus a gpu.module containing the kernel.
 std::unique_ptr<OperationPass<mlir::ModuleOp>> createGpuFusionRewritePass();
@@ -51,7 +54,11 @@ createGpuKernelToRocdlPass();
 /// thread level, respectively.
 void createHloToGpuPipeline(OpPassManager& pm, ArrayRef<int64_t> blockTileDim,
                             ArrayRef<int64_t> warpTileDim,
-                            ArrayRef<int64_t> threadTileDim);
+                            ArrayRef<int64_t> threadTileDim,
+                            bool experimentalSoftmax);
+
+#define GEN_PASS_REGISTRATION
+#include "mlir-hlo/Transforms/gpu_passes.h.inc"
 
 }  // namespace mlir
 

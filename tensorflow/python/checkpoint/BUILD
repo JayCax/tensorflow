@@ -5,14 +5,10 @@ load(
     "//tensorflow/tools/test:performance.bzl",
     "tf_py_logged_benchmark",
 )
-
-# buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "cuda_py_test")
-
-# buildifier: disable=same-origin-load
-load("//tensorflow:tensorflow.bzl", "tf_py_test")
+load("//tensorflow:tensorflow.default.bzl", "cuda_py_test", "tf_py_test")
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow:internal",
     ],
@@ -81,6 +77,7 @@ tf_py_test(
     name = "checkpoint_test",
     srcs = ["checkpoint_test.py"],
     tags = [
+        "no_pip",  # TODO(b/250108043)
         "no_windows",  # TODO(b/201457117)
         "notsan",  # TODO(b/74395663)
     ],
@@ -285,9 +282,14 @@ py_library(
     srcs = ["restore.py"],
     srcs_version = "PY3",
     deps = [
+        ":checkpoint_view",
+        ":functional_saver",
+        ":save_util_v1",
         ":saveable_compat",
+        ":util",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework_ops",
+        "//tensorflow/python:io_ops",
         "//tensorflow/python:io_ops_gen",
         "//tensorflow/python:platform",
         "//tensorflow/python/eager:context",
@@ -295,6 +297,8 @@ py_library(
         "//tensorflow/python/trackable:constants",
         "//tensorflow/python/trackable:python_state",
         "//tensorflow/python/trackable:trackable_utils",
+        "//tensorflow/python/training/saving:saveable_object_util",
+        "//tensorflow/python/util",
     ],
 )
 
@@ -339,6 +343,7 @@ py_library(
         ":checkpoint_options",
         "//tensorflow/python/eager:def_function",
         "//tensorflow/python/saved_model/registration",
+        "//tensorflow/python/trackable:trackable_utils",
         "//tensorflow/python/training/saving:saveable_object",
         "//tensorflow/python/training/saving:saveable_object_util",
     ],
@@ -355,6 +360,7 @@ cuda_py_test(
         ":functional_saver",
         "//tensorflow/python/eager:remote",
         "//tensorflow/python/eager:test",
+        "//tensorflow/python/trackable:trackable_utils",
     ],
 )
 
